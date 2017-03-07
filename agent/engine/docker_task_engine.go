@@ -843,6 +843,22 @@ func (engine *DockerTaskEngine) createContainer(task *api.Task, container *api.C
 		return dockerapi.DockerContainerMetadata{Error: apierrors.NamedError(err)}
 	}
 
+	if v, ok := config.Labels["docker.config.Tty"]; ok {
+		config.Tty, _ = strconv.ParseBool(v)
+		delete(config.Labels, "docker.config.Tty")
+	}
+	if v, ok := container.Environment["ECS_DOCKER_CONFIG_TTY"]; ok {
+		config.Tty, _ = strconv.ParseBool(v)
+	}
+
+	if v, ok := config.Labels["docker.config.OpenStdin"]; ok {
+		config.OpenStdin, _ = strconv.ParseBool(v)
+		delete(config.Labels, "docker.config.OpenStdin")
+	}
+	if v, ok := container.Environment["ECS_DOCKER_CONFIG_OPEN_STDIN"]; ok {
+		config.OpenStdin, _ = strconv.ParseBool(v)
+	}
+
 	// Augment labels with some metadata from the agent. Explicitly do this last
 	// such that it will always override duplicates in the provided raw config
 	// data.

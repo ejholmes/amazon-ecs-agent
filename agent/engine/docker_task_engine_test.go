@@ -756,6 +756,81 @@ func TestCreateContainerMergesLabels(t *testing.T) {
 	taskEngine.(*DockerTaskEngine).createContainer(testTask, testTask.Containers[0])
 }
 
+func TestCreateContainerAllowsExtraDockerConfigInLabels(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+	ctrl, client, _, taskEngine, _, _, _ := mocks(t, ctx, &defaultConfig)
+	defer ctrl.Finish()
+
+	testTask := &api.Task{
+		Arn:     "arn:aws:ecs:us-east-1:012345678910:task/c09f0188-7f87-4b0f-bfc3-16296622b6fe",
+		Family:  "myFamily",
+		Version: "1",
+		Containers: []*api.Container{
+			&api.Container{
+				Name: "c1",
+				DockerConfig: api.DockerConfig{
+					Config: aws.String(`{"Labels":{"docker.config.Tty":"true","docker.config.OpenStdin":"true"}}`),
+				},
+			},
+		},
+	}
+	expectedConfig, err := testTask.DockerConfig(testTask.Containers[0], defaultDockerClientAPIVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedConfig.Tty = true
+	expectedConfig.OpenStdin = true
+	expectedConfig.Labels = map[string]string{
+		"com.amazonaws.ecs.task-arn":                "arn:aws:ecs:us-east-1:012345678910:task/c09f0188-7f87-4b0f-bfc3-16296622b6fe",
+		"com.amazonaws.ecs.container-name":          "c1",
+		"com.amazonaws.ecs.task-definition-family":  "myFamily",
+		"com.amazonaws.ecs.task-definition-version": "1",
+		"com.amazonaws.ecs.cluster":                 "",
+	}
+	client.EXPECT().APIVersion().Return(defaultDockerClientAPIVersion, nil).AnyTimes()
+	client.EXPECT().CreateContainer(gomock.Any(), expectedConfig, gomock.Any(), gomock.Any(), gomock.Any())
+	taskEngine.(*DockerTaskEngine).createContainer(testTask, testTask.Containers[0])
+}
+
+func TestCreateContainerAllowsExtraDockerConfigInEnvironment(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.TODO())
+	defer cancel()
+	ctrl, client, _, taskEngine, _, _, _ := mocks(t, ctx, &defaultConfig)
+	defer ctrl.Finish()
+
+	testTask := &api.Task{
+		Arn:     "arn:aws:ecs:us-east-1:012345678910:task/c09f0188-7f87-4b0f-bfc3-16296622b6fe",
+		Family:  "myFamily",
+		Version: "1",
+		Containers: []*api.Container{
+			&api.Container{
+				Name: "c1",
+				Environment: map[string]string{
+					"ECS_DOCKER_CONFIG_TTY":        "true",
+					"ECS_DOCKER_CONFIG_OPEN_STDIN": "true",
+				},
+			},
+		},
+	}
+	expectedConfig, err := testTask.DockerConfig(testTask.Containers[0], defaultDockerClientAPIVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedConfig.Tty = true
+	expectedConfig.OpenStdin = true
+	expectedConfig.Labels = map[string]string{
+		"com.amazonaws.ecs.task-arn":                "arn:aws:ecs:us-east-1:012345678910:task/c09f0188-7f87-4b0f-bfc3-16296622b6fe",
+		"com.amazonaws.ecs.container-name":          "c1",
+		"com.amazonaws.ecs.task-definition-family":  "myFamily",
+		"com.amazonaws.ecs.task-definition-version": "1",
+		"com.amazonaws.ecs.cluster":                 "",
+	}
+	client.EXPECT().APIVersion().Return(defaultDockerClientAPIVersion, nil).AnyTimes()
+	client.EXPECT().CreateContainer(gomock.Any(), expectedConfig, gomock.Any(), gomock.Any(), gomock.Any())
+	taskEngine.(*DockerTaskEngine).createContainer(testTask, testTask.Containers[0])
+}
+
 // TestTaskTransitionWhenStopContainerTimesout tests that task transitions to stopped
 // only when terminal events are received from docker event stream when
 // StopContainer times out
