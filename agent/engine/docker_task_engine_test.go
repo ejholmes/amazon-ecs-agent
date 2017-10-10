@@ -2238,3 +2238,29 @@ func TestPullStoppedAtWasSetCorrectlyWhenPullFail(t *testing.T) {
 	assert.Equal(t, testTask.PullStartedAt, startTime1)
 	assert.Equal(t, testTask.PullStoppedAt, stopTime3)
 }
+
+func TestCoercePidsLimit(t *testing.T) {
+	config := &docker.HostConfig{
+		Ulimits: []docker.ULimit{
+			{Name: "nproc", Soft: 90, Hard: 90},
+		},
+	}
+
+	coercePidsLimit(config)
+	assert.Equal(t, int64(90), config.PidsLimit)
+	assert.Equal(t, 0, len(config.Ulimits))
+	assert.Equal(t, []docker.ULimit{}, config.Ulimits)
+
+	nofile := docker.ULimit{Name: "nofile", Soft: 100, Hard: 100}
+	config = &docker.HostConfig{
+		Ulimits: []docker.ULimit{
+			nofile,
+			{Name: "nproc", Soft: 90, Hard: 90},
+		},
+	}
+
+	coercePidsLimit(config)
+	assert.Equal(t, int64(90), config.PidsLimit)
+	assert.Equal(t, 1, len(config.Ulimits))
+	assert.Equal(t, []docker.ULimit{nofile}, config.Ulimits)
+}

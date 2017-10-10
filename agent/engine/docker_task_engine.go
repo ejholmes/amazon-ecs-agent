@@ -34,6 +34,7 @@ import (
 	"github.com/aws/amazon-ecs-agent/agent/utils"
 	utilsync "github.com/aws/amazon-ecs-agent/agent/utils/sync"
 	"github.com/aws/amazon-ecs-agent/agent/utils/ttime"
+	docker "github.com/fsouza/go-dockerclient"
 
 	"github.com/cihub/seelog"
 	"github.com/pkg/errors"
@@ -707,6 +708,13 @@ func (engine *DockerTaskEngine) createContainer(task *api.Task, container *api.C
 		return DockerContainerMetadata{Error: api.NamedError(err)}
 	}
 
+	// docker run supports a --pids-limit flag, which replaces the nproc
+	// limit with a container aware version. In almost all circumstances,
+	// noproc should not be used, since it's global.
+	//
+	// See https://github.com/moby/moby/pull/18697
+	coercePidsLimit(hostConfig)
+
 	// Augment labels with some metadata from the agent. Explicitly do this last
 	// such that it will always override duplicates in the provided raw config
 	// data.
@@ -1035,4 +1043,21 @@ func (engine *DockerTaskEngine) updateMetadataFile(task *api.Task, cont *api.Doc
 		cont.Container.SetMetadataFileUpdated()
 		seelog.Debugf("Updated metadata file for container %s of task %s", cont.Container.Name, task.Arn)
 	}
+}
+
+func coercePidsLimit(config *docker.HostConfig) {
+	idx := -1
+	for i, l := range config.Ulimits {
+		if l.Name == "nproc" {
+			idx = i
+			break
+		}
+	}
+
+	if idx < 0 {
+		return
+	}
+
+	config.PidsLimit = config.Ulimits[idx].Soft
+	config.Ulimits = append(config.Ulimits[:idx], config.Ulimits[idx+1:]...)
 }
